@@ -64,7 +64,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
         print("Request: \(request)")
         
         // calculate the current block number (first block is zero)
-        block = Int((Double(request.count - 2) / Double(BLOCK_SIZE)).rounded(.up)) - 1
+        block = Int((Double(request.count - 2) / Double(ArmorDProxy.BLOCK_SIZE)).rounded(.up)) - 1
 
         // process the first (and perhaps only) block
         connect()
@@ -93,7 +93,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     // The size of the data blocks sent to the peripheral which is 512 - 2 = 510, to account for the
     // two leading bytes which tell the peripheral the request type (1 byte) and number of
     // arguments (1 byte)
-    let BLOCK_SIZE = 510
+    static let BLOCK_SIZE = 510
     
     // The request buffer and number of blocks
     var request = [UInt8]()  // empty array of bytes
@@ -117,7 +117,6 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
             print("Bluetooth status is POWERED OFF")
         case .poweredOn:
             print("Bluetooth status is POWERED ON")
-            controller.stepSucceeded(device: self, result: nil)
         @unknown default:
             print("Bluetooth status is \(central.state)")
         }
@@ -128,7 +127,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
      */
     func connect() {
         print("Connecting to an ArmorD peripheral...")
-        startScanning()
+        centralManager!.scanForPeripherals(withServices: [BLE_Service_UUID] , options: nil)
         DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { // wait 10 seconds
             if self.blePeripheral == nil {
                 print("Unable to locate an ArmorD peripheral.")
@@ -146,14 +145,6 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     }
 
     /*
-     * This function is called to start scanning for peripherals that support the correct services.
-     */
-    func startScanning() {
-        print("Now Scanning...")
-        centralManager!.scanForPeripherals(withServices: [BLE_Service_UUID] , options: nil)
-    }
-    
-    /*
      * This function is called to stop scanning for peripherals.
      */
     func stopScanning() {
@@ -169,16 +160,16 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
         print("Processing block: \(block)")
         if (block > 0) {
             // the offset includes the header bytes
-            let offset = block * BLOCK_SIZE + 2
+            let offset = block * ArmorDProxy.BLOCK_SIZE + 2
             
             // calculate the current block size
-            length = min(request.count - offset, BLOCK_SIZE)
+            length = min(request.count - offset, ArmorDProxy.BLOCK_SIZE)
             
             // concatenate a header and the current block bytes
             buffer = [0x00, UInt8(block)] + Array(request[offset ..< (offset + length)])
         } else {
             // calculate the size of the first block
-            length = min(request.count, BLOCK_SIZE + 2)
+            length = min(request.count, ArmorDProxy.BLOCK_SIZE + 2)
 
             // load the first block into the buffer
             buffer = Array(request[0..<length])  // includes the actual header
@@ -199,6 +190,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
         print("  advertisement: \(advertisementData)")
         peripheral.delegate = self
         blePeripheral = peripheral
+        centralManager.connect(blePeripheral!, options: nil)
     }
     
     /*
@@ -209,33 +201,6 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
         stopScanning()
         peripheral.delegate = self
         peripheral.discoverServices([BLE_Service_UUID]) // triggers didDiscoverServicesFor
-    }
-    
-    /*
-     * This function is called each time the peripheral has been disconnected
-     */
-    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        controller.stepSucceeded(device: self, result: nil)
-        guard error == nil else {
-            let reason = String(describing: error!.localizedDescription)
-            print("Error disconnecting peripheral: \(reason)")
-            return
-        }
-        print("Disconnected from peripheral: \(String(describing: peripheral))")
-    }
-    
-    /*
-     * This function is called each time a request was sent to the peripheral
-     */
-    func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
-        guard error == nil else {
-            let reason = String(describing: error!.localizedDescription)
-            print("Error sending request: \(reason)")
-            disconnect()
-            controller.stepFailed(reason: reason)
-            return
-        }
-        print("Request sent.")
     }
     
     /*
@@ -314,6 +279,20 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     }
 
     /*
+     * This function is called each time a request was sent to the peripheral
+     */
+    func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+        guard error == nil else {
+            let reason = String(describing: error!.localizedDescription)
+            print("Error sending request: \(reason)")
+            disconnect()
+            controller.stepFailed(reason: reason)
+            return
+        }
+        print("Request sent.")
+    }
+    
+    /*
      * This function is called each time a response is received from the ArmorD peripheral
      */
     func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
@@ -339,4 +318,17 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
         }
     }
 
+    /*
+     * This function is called each time the peripheral has been disconnected
+     */
+    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+        controller.stepSucceeded(device: self, result: nil)
+        guard error == nil else {
+            let reason = String(describing: error!.localizedDescription)
+            print("Error disconnecting peripheral: \(reason)")
+            return
+        }
+        print("Disconnected from peripheral: \(String(describing: peripheral))")
+    }
+    
 }
