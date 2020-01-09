@@ -1,15 +1,20 @@
 import XCTest
 @testable import swift_bali_hsm_proxy
 
+func randomBytes(size: Int) -> [UInt8] {
+    let bytes = [UInt8](repeating: 0, count: size).map { _ in UInt8.random(in: 0..<255) }
+    return bytes
+}
+
 final class ArmorDTests: XCTestCase {
     
     func testArmorD() {
         class FlowController: FlowControl {
             var step = 0
-            var bytes = formatter.generateBytes(size: 500)
+            var bytes = randomBytes(size: 500)
             var signature: [UInt8]?
             var digest: [UInt8]?
-            var mobileKey = formatter.generateBytes(size: 64)
+            var mobileKey = randomBytes(size: 64)
             var publicKey: [UInt8]?
 
             func stepFailed(reason: String) {
