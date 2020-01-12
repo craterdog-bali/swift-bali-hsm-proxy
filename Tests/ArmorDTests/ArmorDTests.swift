@@ -21,8 +21,8 @@ final class ArmorDTests: XCTestCase {
                 print("Step failed: \(reason)")
             }
             
-            func stepSucceeded(device: ArmorD, result: [UInt8]?) {
-                print("stepSucceeded: \(step)")
+            func nextStep(device: ArmorD, result: [UInt8]?) {
+                print("nextStep: \(step)")
                 step += 1
                 switch (step) {
                     case 1:

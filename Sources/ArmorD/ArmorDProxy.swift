@@ -120,7 +120,7 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
             print("Bluetooth status is POWERED OFF")
         case .poweredOn:
             print("Bluetooth status is POWERED ON")
-            controller.stepSucceeded(device: self, result: nil)
+            controller.nextStep(device: self, result: nil)
         @unknown default:
             print("Bluetooth status is \(central.state)")
         }
@@ -300,7 +300,7 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
                 if block < 0 {
                     print("ArmorD completed the request.")
                     disconnect()
-                    controller.stepSucceeded(device: self, result: byteArray)
+                    controller.nextStep(device: self, result: byteArray)
                 } else {
                     print("ArmorD is ready for the next block of the request.")
                     processBlock() // triggers another didUpdateValueFor
@@ -313,7 +313,7 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
      * This function is called each time the peripheral has been disconnected
      */
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        controller.stepSucceeded(device: self, result: nil)
+        controller.nextStep(device: self, result: nil)
         guard error == nil else {
             let reason = String(describing: error!.localizedDescription)
             print("Error disconnecting peripheral: \(reason)")

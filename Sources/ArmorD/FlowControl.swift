@@ -10,5 +10,5 @@ import Foundation
 
 public protocol FlowControl {
     func stepFailed(reason: String)
-    func stepSucceeded(device: ArmorD, result: [UInt8]?)
+    func nextStep(device: ArmorD, result: [UInt8]?)
 }
