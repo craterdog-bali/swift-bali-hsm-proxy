@@ -10,7 +10,7 @@ import CoreBluetooth
 
 
 // This class acts as a proxy to an ArmorD device that supports bluetooth low energy (BLE).
-class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDelegate {
+public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDelegate {
 
     // PUBLIC INTERFACE
 
@@ -30,7 +30,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
      * specified request is longer than this limit, it is broken up into separate 512 byte
      * blocks and each block is sent as a separate BLE request.
      */
-    func processRequest(type: String, _ args: [UInt8]...) {
+    public func processRequest(type: String, _ args: [UInt8]...) {
         print("Processing a request of type: \(type)")
 
         // decode the request type
@@ -105,7 +105,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     /*
      * This function is called when the mobile device bluetooth status changes.
      */
-    func centralManagerDidUpdateState(_ central: CBCentralManager) {
+    public func centralManagerDidUpdateState(_ central: CBCentralManager) {
         print("Bluetooth is available")
         switch central.state {
         case .unknown:
@@ -173,7 +173,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     /*
      * This function is called when a peripheral has been discovered by mobileDevice.scanForPeripherals()
      */
-    func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
+    public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
         mobileDevice.stopScan()
         let name = String(describing: peripheral.name)
         print("The following peripheral was found:")
@@ -187,7 +187,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     /*
      * This function is called each time a peripheral has been connected to by mobileDevice.connect()
      */
-    func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+    public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
         if peripheral == blePeripheral {
             print("Connected to peripheral: \(String(describing: peripheral))")
             blePeripheral!.discoverServices([BLE_Service_UUID]) // triggers didDiscoverServicesFor
@@ -197,7 +197,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     /*
      * This function is called each time peripheral services are discovered
      */
-    func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+    public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
         guard error == nil else {
             let reason = String(describing: error!.localizedDescription)
             print("Error discovering services: \(reason)")
@@ -221,7 +221,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     /*
      * This function is called each time characteristics for a peripheral service are discovered
      */
-    func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+    public func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
         guard error == nil else {
             let reason = String(describing: error!.localizedDescription)
             print("Error discovering characteristics: \(reason)")
@@ -249,7 +249,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     /*
      * This function is called each time the notification state on the ArmorD peripheral service changes
      */
-    func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+    public func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
         guard error == nil else {
             let reason = String(describing: error!.localizedDescription)
             print("Error changing notification state:\(reason)")
@@ -272,7 +272,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     /*
      * This function is called each time a request was sent to the peripheral
      */
-    func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
+    public func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         guard error == nil else {
             let reason = String(describing: error!.localizedDescription)
             print("Error sending request: \(reason)")
@@ -286,7 +286,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     /*
      * This function is called each time a response is received from the ArmorD peripheral
      */
-    func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
+    public func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         print("A response was received from the ArmorD peripheral.")
         if characteristic == notifyCharacteristic {
             let characteristicData = characteristic.value!
@@ -312,7 +312,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     /*
      * This function is called each time the peripheral has been disconnected
      */
-    func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
+    public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
         controller.stepSucceeded(device: self, result: nil)
         guard error == nil else {
             let reason = String(describing: error!.localizedDescription)

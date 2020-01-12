@@ -8,7 +8,7 @@
 
 import Foundation
 
-protocol FlowControl {
+public protocol FlowControl {
     func stepFailed(reason: String)
     func stepSucceeded(device: ArmorD, result: [UInt8]?)
 }

@@ -12,7 +12,7 @@ import Foundation
 /*
  * This protocol defines the interface to an ArmorD peripheral device.
  */
-protocol ArmorD {
+public protocol ArmorD {
 
     func processRequest(type: String, _ args: [UInt8]...)
 
