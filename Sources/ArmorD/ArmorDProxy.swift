@@ -270,7 +270,8 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
     }
 
     /*
-     * This function is called each time a request was sent to the peripheral
+     * This function is called each time a request was sent to the peripheral. It is just for tracking
+     * purposes, the 'didUpdateValueFor' callback will be called next if no error occurred.
      */
     public func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         guard error == nil else {
@@ -282,21 +283,22 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
     }
     
     /*
-     * This function is called each time a response is received from the ArmorD peripheral
+     * This function is called each time a response is received from the ArmorD peripheral. It will either
+     * process the next block in the request or initiate the processing of the next request.
      */
     public func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         print("A response was received from the ArmorD peripheral.")
         guard error == nil else {
-            self.error = String(describing: error!.localizedDescription)
+            self.error = "An error occurred while processing the request: \(String(describing: error!.localizedDescription))"
             disconnect()
             return
         }
         if characteristic == notifyCharacteristic {
             let characteristicData = characteristic.value!
             print("Characteristic Data: \(characteristicData)")
-            let byteArray = [UInt8](characteristicData)
-            if byteArray.count == 1 && byteArray[0] > 1 {
-                self.error = "ArmorD rejected the request with a status: \(byteArray[0])"
+            result = [UInt8](characteristicData)
+            if result!.count == 1 && result![0] > 1 {
+                self.error = "ArmorD rejected the request with a status: \(result![0])"
                 disconnect()
             } else {
                 if block < 0 {
@@ -310,7 +312,7 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
     }
 
     /*
-     * Disconnect from the ArmorD peripheral
+     * Disconnect from the ArmorD peripheral. It triggers the 'didDisconnectPeripheral' callback.
      */
     func disconnect() {
         print("Disconnecting from the ArmorD peripheral...")
@@ -329,9 +331,9 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
         }
         print("Disconnected from peripheral: \(String(describing: peripheral))")
         if self.error == nil {
-            print("The request was successfully processed: \(String(describing: self.result))")
-            controller.nextStep(device: self, result: self.result)  // may trigger processRequest()
-            self.result = nil  // must reset this before next request occurs
+            print("The request was successfully processed: \(String(describing: result))")
+            controller.nextStep(device: self, result: result)  // may trigger processRequest()
+            result = nil  // must reset this before next request occurs
         } else {
             print("Error while processing request: \(String(describing: self.error))")
             controller.stepFailed(device: self, error: self.error!)  // may trigger processRequest()
