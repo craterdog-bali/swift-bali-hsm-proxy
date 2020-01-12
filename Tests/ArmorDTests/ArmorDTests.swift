@@ -17,8 +17,8 @@ final class ArmorDTests: XCTestCase {
             var mobileKey = randomBytes(size: 64)
             var publicKey: [UInt8]?
 
-            func stepFailed(reason: String) {
-                print("Step failed: \(reason)")
+            func stepFailed(device: ArmorD, error: String) {
+                print("Step failed: \(error)")
             }
             
             func nextStep(device: ArmorD, result: [UInt8]?) {

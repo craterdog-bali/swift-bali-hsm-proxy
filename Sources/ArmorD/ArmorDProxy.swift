@@ -12,6 +12,38 @@ import CoreBluetooth
 // This class acts as a proxy to an ArmorD device that supports bluetooth low energy (BLE).
 public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDelegate {
 
+    // PRIVATE STATE
+
+    // The BLE central manager proxy (iPhone App)
+    var mobileDevice: CBCentralManager!  // must be ! because it is set after super.init() is called
+
+    // The BLE peripheral proxy (ArmorD device)
+    let BLE_Service_UUID = CBUUID(string: "6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
+    var blePeripheral: CBPeripheral?
+
+    // The BLE peripheral RX characteristic (central manager writes to peripheral's UART RX line)
+    let BLE_CharacteristicWrite_UUID = CBUUID(string: "6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
+    var writeCharacteristic: CBCharacteristic?
+
+    // The BLE peripheral TX characteristic (peripheral's notifies central manager using UART TX line)
+    let BLE_CharacteristicNotify_UUID = CBUUID(string: "6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
+    var notifyCharacteristic: CBCharacteristic?
+
+    // A reference to the flow controller via the FlowControl protocol
+    var controller: FlowControl
+
+    // The size of the data blocks sent to the peripheral which is 512 - 2 = 510, to account for the
+    // two leading bytes which tell the peripheral the request type (1 byte) and number of
+    // arguments (1 byte)
+    static let BLOCK_SIZE = 510
+
+    // The request attributes
+    var block = 0
+    var request = [UInt8]()  // empty array of bytes
+    var result: [UInt8]?
+    var error: String?
+
+
     // PUBLIC INTERFACE
 
     init(controller: FlowControl) {
@@ -24,7 +56,34 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
     }
 
     /*
-     * This function sends a request to a BLEUart service for processing (utilizing the processBlock function)
+     * This function is called when the mobile device's bluetooth status changes. It initiates
+     * the request processing with the flow controller. If no requests are pending, nothing
+     * happens until the user initiates the next request sequence.
+     */
+    public func centralManagerDidUpdateState(_ central: CBCentralManager) {
+        print("Bluetooth is available")
+        switch central.state {
+        case .unknown:
+            print("Bluetooth status is UNKNOWN")
+        case .resetting:
+            print("Bluetooth status is RESETTING")
+        case .unsupported:
+            print("Bluetooth status is UNSUPPORTED")
+        case .unauthorized:
+            print("Bluetooth status is UNAUTHORIZED")
+        case .poweredOff:
+            print("Bluetooth status is POWERED OFF")
+        case .poweredOn:
+            print("Bluetooth status is POWERED ON")
+            controller.nextStep(device: self, result: nil)  // triggers processRequest()
+        @unknown default:
+            print("Bluetooth status is \(central.state)")
+        }
+    }
+    
+    /*
+     * This function sends a request to a BLEUart service for processing (utilizing the
+     * processBlock function)
      *
      * Note: A BLEUart service can only handle requests up to 512 bytes in length. If the
      * specified request is longer than this limit, it is broken up into separate 512 byte
@@ -70,64 +129,11 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
         block = Int((Double(request.count - 2) / Double(ArmorDProxy.BLOCK_SIZE)).rounded(.up)) - 1
 
         // process the first (and perhaps only) block
-        connect()
-    }
-    
-    // PRIVATE INTERFACE
-
-    // The BLE central manager proxy (iPhone App)
-    var mobileDevice: CBCentralManager!  // must be ! because it is set after super.init() is called
-    
-    // The BLE peripheral proxy (ArmorD device)
-    let BLE_Service_UUID = CBUUID(string: "6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
-    var blePeripheral: CBPeripheral?
-
-    // The BLE peripheral RX characteristic (central manager writes to peripheral's UART RX line)
-    let BLE_CharacteristicWrite_UUID = CBUUID(string: "6E400002-B5A3-F393-E0A9-E50E24DCCA9E")
-    var writeCharacteristic: CBCharacteristic?
-
-    // The BLE peripheral TX characteristic (peripheral's notifies central manager using UART TX line)
-    let BLE_CharacteristicNotify_UUID = CBUUID(string: "6E400003-B5A3-F393-E0A9-E50E24DCCA9E")
-    var notifyCharacteristic: CBCharacteristic?
-    
-    // A reference to the flow controller via the FlowControl protocol
-    var controller: FlowControl
- 
-    // The size of the data blocks sent to the peripheral which is 512 - 2 = 510, to account for the
-    // two leading bytes which tell the peripheral the request type (1 byte) and number of
-    // arguments (1 byte)
-    static let BLOCK_SIZE = 510
-    
-    // The request buffer and number of blocks
-    var request = [UInt8]()  // empty array of bytes
-    var block = 0
-
-    /*
-     * This function is called when the mobile device bluetooth status changes.
-     */
-    public func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        print("Bluetooth is available")
-        switch central.state {
-        case .unknown:
-            print("Bluetooth status is UNKNOWN")
-        case .resetting:
-            print("Bluetooth status is RESETTING")
-        case .unsupported:
-            print("Bluetooth status is UNSUPPORTED")
-        case .unauthorized:
-            print("Bluetooth status is UNAUTHORIZED")
-        case .poweredOff:
-            print("Bluetooth status is POWERED OFF")
-        case .poweredOn:
-            print("Bluetooth status is POWERED ON")
-            controller.nextStep(device: self, result: nil)
-        @unknown default:
-            print("Bluetooth status is \(central.state)")
-        }
+        connect()  // eventually triggers processBlock()
     }
     
     /*
-     * This function attempts to connect to an ArmorD peripheral
+     * This function attempts to connect to an ArmorD peripheral. It triggers the 'didDiscover' callback.
      */
     func connect() {
         print("Connecting to an ArmorD peripheral...")
@@ -135,15 +141,107 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
     }
     
     /*
-     * Disconnect from the ArmorD peripheral
+     * This function is called when a peripheral has been discovered by mobileDevice.scanForPeripherals().
+     * It triggers the 'didConnect' callback.
      */
-    func disconnect() {
-        print("Disconnecting from the ArmorD peripheral...")
-        mobileDevice.cancelPeripheralConnection(blePeripheral!)
+    public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
+        mobileDevice.stopScan()
+        let name = String(describing: peripheral.name)
+        print("The following peripheral was found:")
+        print("  name: \(name)")
+        print("  advertisement: \(advertisementData)")
+        blePeripheral = peripheral
+        blePeripheral!.delegate = self
+        mobileDevice.connect(blePeripheral!, options: nil)  // triggers 'didConnect' callback
+    }
+    
+    /*
+     * This function is called each time a peripheral has been connected to by mobileDevice.connect(). It
+     * triggers the 'didDiscoverServices' callback.
+     */
+    public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
+        if peripheral == blePeripheral {
+            print("Connected to peripheral: \(String(describing: peripheral))")
+            blePeripheral!.discoverServices([BLE_Service_UUID]) // triggers 'didDiscoverServices' callback
+        }
+    }
+    
+    /*
+     * This function is called each time peripheral services are discovered. It triggers
+     * the 'didDiscoverCharacteristicsFor' callback.
+     */
+    public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
+        guard error == nil else {
+            let reason = String(describing: error!.localizedDescription)
+            print("Error discovering services: \(reason)")
+            disconnect()
+            return
+        }
+        guard let services = peripheral.services else {
+            // No services found, keep trying...
+            return
+        }
+        print("Found \(services.count) services.")
+        for service in services {
+            print("Found service: \(service.uuid)")
+            if service.uuid.isEqual(BLE_Service_UUID)  {
+                peripheral.discoverCharacteristics([
+                    BLE_CharacteristicWrite_UUID,
+                    BLE_CharacteristicNotify_UUID
+                ], for: service) // triggers didDiscoverCharacteristicsFor
+            }
+        }
+    }
+    
+    /*
+     * This function is called each time characteristics for a peripheral service are discovered
+     */
+    public func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
+        guard error == nil else {
+            self.error = "Error discovering characteristics: \(error!.localizedDescription)"
+            disconnect()
+            return
+        }
+        guard let characteristics = service.characteristics else {
+            // No characteristics found, keep trying...
+            return
+        }
+        print("Found \(characteristics.count) characteristics.")
+        for characteristic in characteristics {
+            if characteristic.uuid.isEqual(BLE_CharacteristicWrite_UUID)  {
+                print("Found write characteristic: \(characteristic.uuid)")
+                writeCharacteristic = characteristic
+            } else if characteristic.uuid.isEqual(BLE_CharacteristicNotify_UUID) {
+                print("Found notify characteristic: \(characteristic.uuid)")
+                notifyCharacteristic = characteristic
+                peripheral.setNotifyValue(true, for: notifyCharacteristic!) // triggers didUpdateNotificationStateFor
+            }
+        }
+    }
+    
+    /*
+     * This function is called each time the notification state on the ArmorD peripheral service
+     * changes.
+     */
+    public func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
+        guard error == nil else {
+            self.error = "Error changing notification state:\(error!.localizedDescription)"
+            disconnect()
+            return
+        }
+        let uuid = characteristic.uuid
+        guard characteristic.isNotifying else {
+            self.error = "Unable to receive notifications from characteristic: \(uuid)"
+            disconnect()
+            return
+        }
+        print ("Notifications have begun for: \(uuid)")
+        processBlock() // triggers 'didWriteValueFor' and 'didUpdateValueFor' callbacks
     }
 
     /*
-     * This function processes a single block of the current request.
+     * This function sends the next block of the current request to the peripheral to be
+     * processed.
      */
     func processBlock() {
         var buffer: [UInt8], length: Int;
@@ -166,107 +264,9 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
         }
         block -= 1  // decrement the block count
         let data = NSData(bytes: buffer, length: buffer.count)
+        // triggers 'didWriteValueFor' and 'didUpdateValueFor' callbacks
         blePeripheral!.writeValue(data as Data, for: writeCharacteristic!, type: CBCharacteristicWriteType.withResponse)
         print("\(buffer.count) bytes were written to the ArmorD device.")
-    }
-
-    /*
-     * This function is called when a peripheral has been discovered by mobileDevice.scanForPeripherals()
-     */
-    public func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
-        mobileDevice.stopScan()
-        let name = String(describing: peripheral.name)
-        print("The following peripheral was found:")
-        print("  name: \(name)")
-        print("  advertisement: \(advertisementData)")
-        blePeripheral = peripheral
-        blePeripheral!.delegate = self
-        mobileDevice.connect(blePeripheral!, options: nil)
-    }
-    
-    /*
-     * This function is called each time a peripheral has been connected to by mobileDevice.connect()
-     */
-    public func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        if peripheral == blePeripheral {
-            print("Connected to peripheral: \(String(describing: peripheral))")
-            blePeripheral!.discoverServices([BLE_Service_UUID]) // triggers didDiscoverServicesFor
-        }
-    }
-    
-    /*
-     * This function is called each time peripheral services are discovered
-     */
-    public func peripheral(_ peripheral: CBPeripheral, didDiscoverServices error: Error?) {
-        guard error == nil else {
-            let reason = String(describing: error!.localizedDescription)
-            print("Error discovering services: \(reason)")
-            disconnect()
-            controller.stepFailed(reason: reason)
-            return
-        }
-        guard let services = peripheral.services else {
-            // No services found, keep trying...
-            return
-        }
-        print("Found \(services.count) services.")
-        for service in services {
-            print("Found service: \(service.uuid)")
-            if service.uuid.isEqual(BLE_Service_UUID)  {
-                peripheral.discoverCharacteristics(nil, for: service) // triggers didDiscoverCharacteristicsFor
-            }
-        }
-    }
-    
-    /*
-     * This function is called each time characteristics for a peripheral service are discovered
-     */
-    public func peripheral(_ peripheral: CBPeripheral, didDiscoverCharacteristicsFor service: CBService, error: Error?) {
-        guard error == nil else {
-            let reason = String(describing: error!.localizedDescription)
-            print("Error discovering characteristics: \(reason)")
-            disconnect()
-            controller.stepFailed(reason: reason)
-            return
-        }
-        guard let characteristics = service.characteristics else {
-            // No characteristics found, keep trying...
-            return
-        }
-        print("Found \(characteristics.count) characteristics.")
-        for characteristic in characteristics {
-            if characteristic.uuid.isEqual(BLE_CharacteristicWrite_UUID)  {
-                print("Found write characteristic: \(characteristic.uuid)")
-                writeCharacteristic = characteristic
-            } else if characteristic.uuid.isEqual(BLE_CharacteristicNotify_UUID) {
-                print("Found notify characteristic: \(characteristic.uuid)")
-                notifyCharacteristic = characteristic
-                peripheral.setNotifyValue(true, for: notifyCharacteristic!) // triggers didUpdateNotificationStateFor
-            }
-        }
-    }
-    
-    /*
-     * This function is called each time the notification state on the ArmorD peripheral service changes
-     */
-    public func peripheral(_ peripheral: CBPeripheral, didUpdateNotificationStateFor characteristic: CBCharacteristic, error: Error?) {
-        guard error == nil else {
-            let reason = String(describing: error!.localizedDescription)
-            print("Error changing notification state:\(reason)")
-            disconnect()
-            controller.stepFailed(reason: reason)
-            return
-        }
-        guard characteristic.isNotifying else {
-            let reason = "Can't notify"
-            print("Error changing notification state:\(reason)")
-            disconnect()
-            controller.stepFailed(reason: reason)
-            return
-        }
-        let uuid = characteristic.uuid
-        print ("Notification has begun for: \(uuid)")
-        processBlock() // triggers didUpdateValueFor
     }
 
     /*
@@ -274,10 +274,8 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
      */
     public func peripheral(_ peripheral: CBPeripheral, didWriteValueFor characteristic: CBCharacteristic, error: Error?) {
         guard error == nil else {
-            let reason = String(describing: error!.localizedDescription)
-            print("Error sending request: \(reason)")
+            self.error = String(describing: error!.localizedDescription)
             disconnect()
-            controller.stepFailed(reason: reason)
             return
         }
         print("Request sent.")
@@ -288,19 +286,21 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
      */
     public func peripheral(_ peripheral: CBPeripheral, didUpdateValueFor characteristic: CBCharacteristic, error: Error?) {
         print("A response was received from the ArmorD peripheral.")
+        guard error == nil else {
+            self.error = String(describing: error!.localizedDescription)
+            disconnect()
+            return
+        }
         if characteristic == notifyCharacteristic {
             let characteristicData = characteristic.value!
             print("Characteristic Data: \(characteristicData)")
             let byteArray = [UInt8](characteristicData)
             if byteArray.count == 1 && byteArray[0] > 1 {
-                print("ArmorD rejected the request.")
+                self.error = "ArmorD rejected the request with a status: \(byteArray[0])"
                 disconnect()
-                controller.stepFailed(reason: "ArmorD rejected the request with a status: \(byteArray[0])")
             } else {
                 if block < 0 {
-                    print("ArmorD completed the request.")
                     disconnect()
-                    controller.nextStep(device: self, result: byteArray)
                 } else {
                     print("ArmorD is ready for the next block of the request.")
                     processBlock() // triggers another didUpdateValueFor
@@ -310,16 +310,33 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
     }
 
     /*
-     * This function is called each time the peripheral has been disconnected
+     * Disconnect from the ArmorD peripheral
+     */
+    func disconnect() {
+        print("Disconnecting from the ArmorD peripheral...")
+        mobileDevice.cancelPeripheralConnection(blePeripheral!)
+    }
+
+    /*
+     * This function is called each time the peripheral has been disconnected. It tells the flow
+     * controller the outcome of the request which may result in another request being initiated.
      */
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        controller.nextStep(device: self, result: nil)
-        guard error == nil else {
+        if error != nil {
             let reason = String(describing: error!.localizedDescription)
-            print("Error disconnecting peripheral: \(reason)")
-            return
+            print("Error while disconnecting peripheral: \(reason)")
+            // can't really do anything about it, except assume we are disconnected...
         }
         print("Disconnected from peripheral: \(String(describing: peripheral))")
+        if self.error == nil {
+            print("The request was successfully processed: \(String(describing: self.result))")
+            controller.nextStep(device: self, result: self.result)  // may trigger processRequest()
+            self.result = nil  // must reset this before next request occurs
+        } else {
+            print("Error while processing request: \(String(describing: self.error))")
+            controller.stepFailed(device: self, error: self.error!)  // may trigger processRequest()
+            self.error = nil  // must reset this before next request occurs
+        }
     }
     
 }
