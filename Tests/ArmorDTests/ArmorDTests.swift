@@ -1,5 +1,5 @@
 import XCTest
-@testable import swift_bali_hsm_proxy
+@testable import ArmorD
 
 func randomBytes(size: Int) -> [UInt8] {
     let bytes = [UInt8](repeating: 0, count: size).map { _ in UInt8.random(in: 0..<255) }
@@ -22,6 +22,7 @@ final class ArmorDTests: XCTestCase {
             }
             
             func stepSucceeded(device: ArmorD, result: [UInt8]?) {
+                print("stepSucceeded: \(step)")
                 step += 1
                 switch (step) {
                     case 1:

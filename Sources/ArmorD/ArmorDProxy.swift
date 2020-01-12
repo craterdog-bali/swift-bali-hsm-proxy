@@ -15,9 +15,12 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     // PUBLIC INTERFACE
 
     init(controller: FlowControl) {
+        print("ArmorDProxy.init()")
         self.controller = controller
         super.init()  // must be called before next line which passes self in as an argument
-        centralManager = CBCentralManager(delegate: self, queue: nil)
+        print("super.init() finished")
+        mobileDevice = CBCentralManager(delegate: self, queue: nil)  // must be called after super.init()
+        print("The mobile device has been initialized")
     }
 
     /*
@@ -73,7 +76,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     // PRIVATE INTERFACE
 
     // The BLE central manager proxy (iPhone App)
-    var centralManager: CBCentralManager!
+    var mobileDevice: CBCentralManager!  // must be ! because it is set after super.init() is called
     
     // The BLE peripheral proxy (ArmorD device)
     let BLE_Service_UUID = CBUUID(string: "6E400001-B5A3-F393-E0A9-E50E24DCCA9E")
@@ -103,7 +106,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
      * This function is called when the mobile device bluetooth status changes.
      */
     func centralManagerDidUpdateState(_ central: CBCentralManager) {
-        print("CentralManager is initialized")
+        print("Bluetooth is available")
         switch central.state {
         case .unknown:
             print("Bluetooth status is UNKNOWN")
@@ -117,6 +120,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
             print("Bluetooth status is POWERED OFF")
         case .poweredOn:
             print("Bluetooth status is POWERED ON")
+            controller.stepSucceeded(device: self, result: nil)
         @unknown default:
             print("Bluetooth status is \(central.state)")
         }
@@ -127,13 +131,7 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
      */
     func connect() {
         print("Connecting to an ArmorD peripheral...")
-        centralManager!.scanForPeripherals(withServices: [BLE_Service_UUID] , options: nil)
-        DispatchQueue.main.asyncAfter(deadline: .now() + 10.0) { // wait 10 seconds
-            if self.blePeripheral == nil {
-                print("Unable to locate an ArmorD peripheral.")
-                self.stopScanning()
-            }
-        }
+        mobileDevice.scanForPeripherals(withServices: [BLE_Service_UUID], options: nil)
     }
     
     /*
@@ -141,17 +139,9 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
      */
     func disconnect() {
         print("Disconnecting from the ArmorD peripheral...")
-        centralManager!.cancelPeripheralConnection(blePeripheral!)
+        mobileDevice.cancelPeripheralConnection(blePeripheral!)
     }
 
-    /*
-     * This function is called to stop scanning for peripherals.
-     */
-    func stopScanning() {
-        print("Stopped scanning for peripherals.")
-        centralManager!.stopScan()
-    }
-    
     /*
      * This function processes a single block of the current request.
      */
@@ -181,26 +171,27 @@ class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripheralDeleg
     }
 
     /*
-     * This function is called when a peripheral has been discovered
+     * This function is called when a peripheral has been discovered by mobileDevice.scanForPeripherals()
      */
     func centralManager(_ central: CBCentralManager, didDiscover peripheral: CBPeripheral, advertisementData: [String: Any], rssi RSSI: NSNumber) {
+        mobileDevice.stopScan()
         let name = String(describing: peripheral.name)
         print("The following peripheral was found:")
         print("  name: \(name)")
         print("  advertisement: \(advertisementData)")
-        peripheral.delegate = self
         blePeripheral = peripheral
-        centralManager.connect(blePeripheral!, options: nil)
+        blePeripheral!.delegate = self
+        mobileDevice.connect(blePeripheral!, options: nil)
     }
     
     /*
-     * This function is called each time a peripheral has been connected
+     * This function is called each time a peripheral has been connected to by mobileDevice.connect()
      */
     func centralManager(_ central: CBCentralManager, didConnect peripheral: CBPeripheral) {
-        print("Connected to peripheral: \(String(describing: peripheral))")
-        stopScanning()
-        peripheral.delegate = self
-        peripheral.discoverServices([BLE_Service_UUID]) // triggers didDiscoverServicesFor
+        if peripheral == blePeripheral {
+            print("Connected to peripheral: \(String(describing: peripheral))")
+            blePeripheral!.discoverServices([BLE_Service_UUID]) // triggers didDiscoverServicesFor
+        }
     }
     
     /*
