@@ -126,7 +126,7 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
         print("Request: \(request)")
         
         // calculate the current block number (first block is zero)
-        block = Int((Double(request.count - 2) / Double(ArmorDProxy.BLOCK_SIZE)).rounded(.up))
+        block = Int((Double(request.count - 2) / Double(ArmorDProxy.BLOCK_SIZE)).rounded(.down))
 
         // process the first (and perhaps only) block
         connect()  // eventually triggers processBlock()
