@@ -127,6 +127,7 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
         
         // calculate the current block number (first block is zero)
         block = Int((Double(request.count - 2) / Double(ArmorDProxy.BLOCK_SIZE)).rounded(.down))
+        print("Request byte count: \(request.count)")
         print("New block count: \(block)")
         print("")
 
