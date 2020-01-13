@@ -46,7 +46,7 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
 
     // PUBLIC INTERFACE
 
-    init(controller: FlowControl) {
+    public init(controller: FlowControl) {
         print("ArmorDProxy.init()")
         self.controller = controller
         super.init()  // must be called before next line which passes self in as an argument

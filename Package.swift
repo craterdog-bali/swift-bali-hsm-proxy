@@ -11,14 +11,17 @@ let package = Package(
     products: [
         .library(
             name: "ArmorD",
-            targets: ["ArmorD"]),
+            targets: ["ArmorD"]
+        )
     ],
     targets: [
         .target(
             name: "ArmorD",
-            dependencies: []),
+            dependencies: []
+        ),
         .testTarget(
             name: "ArmorDTests",
-            dependencies: ["ArmorD"]),
+            dependencies: ["ArmorD"]
+        )
     ]
 )
