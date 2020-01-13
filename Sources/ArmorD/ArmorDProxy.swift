@@ -38,7 +38,7 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
     static let BLOCK_SIZE = 510
 
     // The request attributes
-    var block = 0
+    var block = -1
     var request = [UInt8]()  // empty array of bytes
     var result: [UInt8]?
     var error: String?
@@ -255,7 +255,6 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
             
             // concatenate a header and the current block bytes
             buffer = [0x00, UInt8(block)] + Array(request[offset ..< (offset + length)])
-            block -= 1  // decrement the block count
         } else {
             // calculate the size of the first block
             length = min(request.count, ArmorDProxy.BLOCK_SIZE + 2)
@@ -263,6 +262,7 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
             // load the first block into the buffer
             buffer = Array(request[0..<length])  // includes the actual header
         }
+        block -= 1  // decrement the block count
         let data = NSData(bytes: buffer, length: buffer.count)
         // triggers 'didWriteValueFor' and 'didUpdateValueFor' callbacks
         blePeripheral!.writeValue(data as Data, for: writeCharacteristic!, type: CBCharacteristicWriteType.withResponse)
@@ -293,22 +293,26 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
             disconnect()
             return
         }
-        if characteristic == notifyCharacteristic {
-            let characteristicData = characteristic.value!
-            print("Characteristic Data: \(characteristicData)")
-            result = [UInt8](characteristicData)
-            if result!.count == 1 && result![0] > 1 {
-                self.error = "ArmorD rejected the request with a status: \(result![0])"
-                disconnect()
-            } else {
-                if block < 0 {
-                    disconnect()
-                } else {
-                    print("ArmorD is ready for the next block of the request.")
-                    processBlock() // triggers another didUpdateValueFor
-                }
-            }
+        guard characteristic == notifyCharacteristic else {
+            print("Received an unexpected characteristic update notification: \(characteristic)")
+            //disconnect()  see if this ever happens before deciding whether this is necessary
+            return
         }
+        let characteristicData = characteristic.value!
+        print("Characteristic Data: \(characteristicData)")
+        result = [UInt8](characteristicData)
+        guard result!.count > 1 || result![0] != 255 else {
+            self.error = "ArmorD rejected the request with a status: \(result![0])"
+            disconnect()
+            return
+        }
+        guard block >= 0 else {
+            print("ArmorD completed the processing of the request.")
+            disconnect()
+            return
+        }
+        print("ArmorD is ready for the next block of the request.")
+        processBlock() // triggers another didUpdateValueFor
     }
 
     /*
@@ -324,21 +328,22 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
      * controller the outcome of the request which may result in another request being initiated.
      */
     public func centralManager(_ central: CBCentralManager, didDisconnectPeripheral peripheral: CBPeripheral, error: Error?) {
-        if error != nil {
+        guard error == nil else {
             let reason = String(describing: error!.localizedDescription)
             print("Error while disconnecting peripheral: \(reason)")
             // can't really do anything about it, except assume we are disconnected...
+            return
         }
         print("Disconnected from peripheral: \(String(describing: peripheral))")
-        if self.error == nil {
-            print("The request was successfully processed: \(String(describing: result))")
-            controller.nextStep(device: self, result: result)  // may trigger processRequest()
-            result = nil  // must reset this before next request occurs
-        } else {
+        guard self.error == nil else {
             print("Error while processing request: \(String(describing: self.error))")
             controller.stepFailed(device: self, error: self.error!)  // may trigger processRequest()
             self.error = nil  // must reset this before next request occurs
+            return
         }
+        print("The request was successfully processed: \(String(describing: result))")
+        controller.nextStep(device: self, result: result)  // may trigger processRequest()
+        result = nil  // must reset this before next request occurs
     }
     
 }
