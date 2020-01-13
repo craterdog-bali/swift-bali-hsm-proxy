@@ -47,10 +47,8 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
     // PUBLIC INTERFACE
 
     public init(controller: FlowControl) {
-        print("ArmorDProxy.init()")
         self.controller = controller
         super.init()  // must be called before next line which passes self in as an argument
-        print("super.init() finished")
         mobileDevice = CBCentralManager(delegate: self, queue: nil)  // must be called after super.init()
         print("The mobile device has been initialized")
     }
@@ -90,6 +88,7 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
      * blocks and each block is sent as a separate BLE request.
      */
     public func processRequest(type: String, _ args: [UInt8]...) {
+        print("")
         print("Processing a request of type: \(type)")
 
         // decode the request type
@@ -123,13 +122,12 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
         }
 
         // the request is fully assembled
-        print("Request: \(request)")
+        print("Request bytes: \(request)")
         
         // calculate the current block number (first block is zero)
         block = Int((Double(request.count - 3) / Double(ArmorDProxy.BLOCK_SIZE)).rounded(.towardZero))
         print("Request byte count: \(request.count)")
-        print("New block count: \(block)")
-        print("")
+        print("Number of additional blocks: \(block)")
 
         // process the first (and perhaps only) block
         connect()  // eventually triggers processBlock()
