@@ -255,6 +255,7 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
             
             // concatenate a header and the current block bytes
             buffer = [0x00, UInt8(block)] + Array(request[offset ..< (offset + length)])
+            block -= 1  // decrement the block count
         } else {
             // calculate the size of the first block
             length = min(request.count, ArmorDProxy.BLOCK_SIZE + 2)
@@ -262,7 +263,6 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
             // load the first block into the buffer
             buffer = Array(request[0..<length])  // includes the actual header
         }
-        block -= 1  // decrement the block count
         let data = NSData(bytes: buffer, length: buffer.count)
         // triggers 'didWriteValueFor' and 'didUpdateValueFor' callbacks
         blePeripheral!.writeValue(data as Data, for: writeCharacteristic!, type: CBCharacteristicWriteType.withResponse)
