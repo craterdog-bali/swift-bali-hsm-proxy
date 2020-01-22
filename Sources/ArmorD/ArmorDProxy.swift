@@ -332,13 +332,13 @@ public class ArmorDProxy: NSObject, ArmorD, CBCentralManagerDelegate, CBPeripher
         guard error == nil else {
             let reason = String(describing: error!.localizedDescription)
             print("Error while disconnecting peripheral: \(reason)")
-            // can't really do anything about it, except assume we are disconnected...
+            controller.stepFailed(device: self, error: "The ArmorD device went out of range.")  // should trigger processRequest()
             return
         }
         print("Disconnected from peripheral: \(String(describing: peripheral))")
         guard self.error == nil else {
             print("Error while processing request: \(String(describing: self.error))")
-            controller.stepFailed(device: self, error: self.error!)  // may trigger processRequest()
+            controller.stepFailed(device: self, error: self.error!)  // should trigger processRequest()
             self.error = nil  // must reset this before next request occurs
             return
         }
