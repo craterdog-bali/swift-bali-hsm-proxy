@@ -1,3 +1,2 @@
-# swift-bali-hsm-proxy
-
-A description of this package.
+## Swift Bali HSM Proxy
+<img src="https://craterdog.com/images/CraterDogLogo.png" width="50%">
